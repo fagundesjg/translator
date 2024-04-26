@@ -1,0 +1,7 @@
+venv/
+__pycache__
+input/
+output/
+dist/
+build/
+input2/
