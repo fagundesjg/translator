@@ -3,7 +3,6 @@ import shutil
 import datetime
 import argparse
 import googletrans
-from pathlib import Path
 from termcolor import colored
 
 translator = googletrans.Translator()
@@ -49,37 +48,43 @@ logger = Logger()
 def copy_file(src: str, dest: str, dest_folder: str) -> bool:
     if os.path.isfile(src):
         logger.debug("1", src, dest)
-        path_file = os.path.join(dest_folder, dest)
-        if not os.path.exists(dest_folder):
-            os.mkdir(dest_folder)
-        logger.debug(f"Vai copiar {src} -> {path_file}")
-        shutil.copy2(src, path_file)
+        dirname = os.path.dirname(dest)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname, exist_ok=True)
+        logger.debug(f"Vai copiar {src} -> {dest}")
+        shutil.copy2(src, dest)
     else:
         logger.debug("2", src, dest)
-        os.rename(src, dest)
-
-
-def translate(name: str, dest_folder: str, attempt: int = 1):
-    detected_lang = translator.detect(name)
-    if detected_lang.lang != "pt":
+        os.makedirs(dest, exist_ok=True)
         try:
-            translated = translator.translate(
-                text=name, src=detected_lang.lang, dest='pt')
-            logger.log(
-                f"Será traduzido de {detected_lang.lang} {name} -> {translated.text}")
-            copy_file(src=name, dest=translated.text, dest_folder=dest_folder)
-            logger.success(f"Arquivo renomeado {name} -> {translated.text}")
+            os.rename(os.path.join(dest_folder, src), dest)
+            logger.success(f"{dest} renomeado com sucesso.")
         except Exception as err:
-            logger.error(f"Ocorreu um erro na tradução de '{name}': ", err)
-            if attempt < 3:
-                logger.warn(
-                    f"({attempt + 1}) Tentando novamente realizar a tradução de '{name}'")
-                translate(name=name,
-                          dest_folder=dest_folder, attempt=attempt+1)
-    else:
-        logger.log(f"OK: {name}")
-        copy_file(src=name, dest=os.path.join(
-            dest_folder, name), dest_folder=dest_folder)
+            logger.error(f"Erro ao renomear: {err}")
+
+
+def translate(file: str, current_folder: str, dest_folder: str, attempt: int = 1):
+    try:
+        detected_lang = translator.detect(file)
+        if detected_lang.lang != "pt":
+            translated = translator.translate(
+                text=file, src=detected_lang.lang, dest='pt')
+            logger.log(
+                f"[{detected_lang.lang}] Será traduzido de {file} -> {translated.text}")
+            copy_file(src=os.path.join(current_folder, file), dest=os.path.join(
+                dest_folder, current_folder, translated.text), dest_folder=dest_folder)
+            logger.success(f"Arquivo renomeado {file} -> {translated.text}")
+        else:
+            logger.log(f"OK: {file}")
+            copy_file(src=os.path.join(current_folder, file), dest=os.path.join(
+                dest_folder, current_folder, file), dest_folder=dest_folder)
+    except Exception as err:
+        logger.error(f"Ocorreu um erro na tradução de '{file}': ", err)
+        if attempt < 3:
+            logger.warn(
+                f"({attempt + 1}) Tentando novamente realizar a tradução de '{file}'")
+            translate(file=file,
+                      current_folder=current_folder, dest_folder=dest_folder, attempt=attempt+1)
 
 
 def translate_all(folder: str, dest_folder: str):
@@ -87,18 +92,12 @@ def translate_all(folder: str, dest_folder: str):
         files = os.listdir(folder)
         files.sort()
 
-        os.chdir(folder)
-        logger.debug("Diretório atual: ", os.getcwd())
-
         for file_name in files:
-            if file_name == dest_folder:
-                continue
             logger.debug("Arquivo atual: ", file_name)
-            translate_all(folder=file_name, dest_folder=dest_folder)
-            translate(name=file_name, dest_folder=dest_folder)
-
-        logger.debug("Voltou um diretorio")
-        os.chdir("..")
+            translate_all(folder=os.path.join(
+                folder, file_name), dest_folder=dest_folder)
+            translate(file=file_name, current_folder=folder,
+                      dest_folder=dest_folder)
 
 
 def main():
